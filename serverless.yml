@@ -1,0 +1,77 @@
+service: <service_name>
+
+provider:
+  name: aws
+  runtime: python3.8
+  stage: ${opt:stage, 'dev'}
+  region: eu-central-1
+  environment:
+    CLIENT_ID:
+      Ref: <CognitoPoolClient_name>
+
+
+functions:
+  <function_name>:
+    handler: <function_name>.<function_handler>
+    events:
+      - http:
+          path: <path> 
+          method: <get | post | put | delete | ...>
+          private: true
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref <Authorizer_name>
+
+resources:
+  Resources:
+    #documentación: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-cognito-userpool.html
+    <CognitoPool-name>:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        UserPoolName: <cognitoPool_name>
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 8
+            RequireLowercase: true
+            RequireNumbers: true
+            RequireSymbols: true
+            RequireUppercase: true
+            TemporaryPasswordValidityDays: 15
+        UsernameAttributes:
+          - <email | phone_number>
+        AutoVerifiedAttributes:
+          - <email | phone_number>
+        EmailVerificationMessage: 'Tu código de verificación es {####}'
+        EmailVerificationSubject: 'Tu código para MiApp'
+        MfaConfiguration: OFF
+        UserPoolTags:
+          Env: ${self:provider.stage}
+        AdminCreateUserConfig:
+          AllowAdminCreateUserOnly: false
+          InviteMessageTemplate:
+            EmailMessage: 'Esta es tu contraseña para tu cuenta {username} en MiApp: {####}'
+            EmailSubject: 'Tu cuenta para MiApp'
+        UsernameConfiguration:
+          CaseSensitive: false
+    #Documentación: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-cognito-userpoolclient.html
+    <CognitoPoolClient_name>:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: <cognitoPoolClient_name>
+        ExplicitAuthFlows:
+          - USER_PASSWORD_AUTH
+        RefreshTokenValidity: 30
+        UserPoolId:
+          Ref: <CognitoPool_name> 
+    #Documentación: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-apigateway-authorizer.html
+    <Authorizer-name>:
+      Type: AWS::ApiGateway::Authorizer
+      Properties:
+        Name: <authorizer_name>
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        Type: COGNITO_USER_POOLS
+        ProviderARNs:
+          - !GetAtt <CognitoPool_name>.Arn
+        IdentitySource: method.request.header.Authorization
